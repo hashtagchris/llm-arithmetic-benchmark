@@ -161,17 +161,11 @@ def _numeric_cell_value(cell: str) -> Decimal | None:
 
 
 def _cell_location(
-    expected: list[list[str]],
     row_index: int,
     column_index: int,
 ) -> str:
     """Format a stable row and column location for diagnostics."""
-    column_name = expected[0][column_index]
-    row_name = expected[row_index][0] if row_index > 0 else "header"
-    return (
-        f"row {row_index + 1} ({row_name!r}), "
-        f"column {column_index + 1} ({column_name!r})"
-    )
+    return f"row {row_index + 1}, column {column_index + 1}"
 
 
 def _cells_match(
@@ -294,7 +288,7 @@ def describe_mismatch(
             if matches:
                 continue
 
-            location = _cell_location(expected, row_index, column_index)
+            location = _cell_location(row_index, column_index)
             differences.append(
                 f"{location}: expected {expected_cell!r}, got {actual_cell!r}"
             )
@@ -635,7 +629,7 @@ def run_benchmark(
 
 
 def summarize_results(results: list[TrialResult]) -> list[dict]:
-    """Aggregate accuracy and latency by model."""
+    """Aggregate accuracy, latency, and differing cells by model."""
     summaries = []
     for model in sorted({result.model for result in results}):
         model_results = [result for result in results if result.model == model]
@@ -655,8 +649,10 @@ def summarize_results(results: list[TrialResult]) -> list[dict]:
                     if latencies
                     else "0.00"
                 ),
-                "differing_cells": sum(
-                    result.differing_cells for result in model_results
+                "differing_cells": (
+                    f"{sum(result.differing_cells for result in model_results) / total:.2f}"
+                    if total
+                    else "0.00"
                 ),
                 "errors": sum(result.error is not None for result in model_results),
             }

@@ -82,7 +82,7 @@ Results are written to `results/`:
 |---|---|
 | `checkpoint_<timestamp>.json` | Partial results saved after each completed trial |
 | `raw_results_<timestamp>.json` | Full trial data, including raw and normalized responses |
-| `summary_<timestamp>.csv` | Accuracy, average latency in seconds to two decimal places, differing-cell totals, and error totals by model |
+| `summary_<timestamp>.csv` | Accuracy, average latency in seconds, average differing cells per trial, and error totals by model |
 
 ## Running Tests
 
