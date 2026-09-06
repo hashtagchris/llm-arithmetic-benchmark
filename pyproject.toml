@@ -1,16 +1,12 @@
 [project]
-name = "llm-group-count"
+name = "llm-arithmetic-benchmark"
 version = "0.1.0"
-description = "Empirical study of LLM counting and aggregation abilities"
+description = "Benchmark LLM accuracy at completing an arithmetic Markdown table"
 requires-python = ">=3.11"
 dependencies = [
     "chatlas>=0.2.0",
     "openai>=1.0.0",
     "anthropic>=0.30.0",
-    "pandas>=2.0.0",
-    "numpy>=1.24.0",
-    "pyyaml>=6.0.0",
-    "matplotlib>=3.7.0",
 ]
 
 [project.optional-dependencies]
