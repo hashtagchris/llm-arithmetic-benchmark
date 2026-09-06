@@ -161,17 +161,11 @@ def _numeric_cell_value(cell: str) -> Decimal | None:
 
 
 def _cell_location(
-    expected: list[list[str]],
     row_index: int,
     column_index: int,
 ) -> str:
     """Format a stable row and column location for diagnostics."""
-    column_name = expected[0][column_index]
-    row_name = expected[row_index][0] if row_index > 0 else "header"
-    return (
-        f"row {row_index + 1} ({row_name!r}), "
-        f"column {column_index + 1} ({column_name!r})"
-    )
+    return f"row {row_index + 1}, column {column_index + 1}"
 
 
 def _cells_match(
@@ -294,7 +288,7 @@ def describe_mismatch(
             if matches:
                 continue
 
-            location = _cell_location(expected, row_index, column_index)
+            location = _cell_location(row_index, column_index)
             differences.append(
                 f"{location}: expected {expected_cell!r}, got {actual_cell!r}"
             )

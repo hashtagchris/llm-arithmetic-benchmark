@@ -269,6 +269,9 @@ def test_mismatch_description() -> None:
     description = describe_mismatch(expected, different)
 
     assert description.startswith("first differing cells:")
+    assert "row 5, column 3" in description
+    assert repr(expected[4][0]) not in description
+    assert repr(expected[0][2]) not in description
     assert "$0.01 per GB" in description
     assert "$0.02 per GB" in description
     assert "0.03%" in description
