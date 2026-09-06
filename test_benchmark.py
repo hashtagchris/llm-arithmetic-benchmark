@@ -56,9 +56,9 @@ def test_assets() -> None:
 
     assert PROMPT_PATH.name == "prompt.md"
     assert EXPECTED_RESPONSE_PATH.name == "expected_response.md"
-    assert "400 GB per day | $1,408 per day |" in prompt
+    assert "400 GB per day | $1,408.00 per day |" in prompt
     assert "strict round-half-up" in prompt
-    assert "USD value you add, use exactly two decimal places" in prompt
+    assert "exactly two decimal places for all USD values" in prompt
     assert "four significant figures" in prompt
     assert "first discarded digit is 5 or greater" in prompt
     assert "23.48%" not in prompt
@@ -79,6 +79,13 @@ def test_expected_response_values() -> None:
     assert expected is not None
     tiers = rows_by_tier(expected)
     pay_as_you_go = Decimal("4.60")
+
+    for row in tiers.values():
+        for cell in row[1:4]:
+            if cell != "N/A":
+                amount = cell.split()[0]
+                assert amount.startswith("$")
+                assert len(amount.rsplit(".", 1)[-1]) == 2
 
     for tier, expected_cells in EXPECTED_MISSING_CELLS.items():
         assert tuple(tiers[tier][2:]) == expected_cells
@@ -129,8 +136,8 @@ def test_incorrect_tables() -> None:
     )
     malformed = normalize_markdown_table(
         expected_markdown.replace(
-            "400 GB per day | $1,408 per day | $3.52 per GB",
-            "400 GB per day | $1,408 per day $3.52 per GB",
+            "400 GB per day | $1,408.00 per day | $3.52 per GB",
+            "400 GB per day | $1,408.00 per day $3.52 per GB",
         )
     )
 

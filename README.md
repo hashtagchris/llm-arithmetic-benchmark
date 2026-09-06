@@ -18,7 +18,7 @@ The comparison ignores presentation-only differences:
 
 Headers, row order, row and column counts, source values, calculated values, punctuation, significant figures, and trailing zeros must match.
 
-Added USD values use exactly two decimal places, while savings percentages use exactly four significant figures. Both use strict round-half-up rounding, as specified in the prompt.
+All USD values use exactly two decimal places, while savings percentages use exactly four significant figures. Both use strict round-half-up rounding, as specified in the prompt.
 
 Wrong trials report an unparseable response or a row/cell count mismatch. When
 the table shape matches, the output identifies the first three differing cells.
