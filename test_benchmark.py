@@ -12,6 +12,7 @@ from benchmark import (
     EXPECTED_RESPONSE_PATH,
     PROMPT_PATH,
     check_correct,
+    describe_mismatch,
     format_normalized_table,
     get_model_response,
     load_benchmark_assets,
@@ -140,6 +141,39 @@ def test_incorrect_tables() -> None:
     assert not check_correct(expected, None)
 
 
+def test_mismatch_description() -> None:
+    """Describe shape errors or at most the first three differing cells."""
+    _, expected_markdown = load_benchmark_assets()
+    expected = normalize_markdown_table(expected_markdown)
+    assert expected is not None
+
+    assert "parseable rectangular Markdown table" in describe_mismatch(expected, None)
+
+    missing_row = [row.copy() for row in expected[:-1]]
+    assert describe_mismatch(expected, missing_row) == (
+        "row count mismatch: expected 13, got 12"
+    )
+
+    fewer_cells = [row[:-1] for row in expected]
+    assert describe_mismatch(expected, fewer_cells) == (
+        "cell count mismatch: expected 65, got 52"
+    )
+
+    different = [row.copy() for row in expected]
+    different[4][2] = "$0.01 per GB"
+    different[4][3] = "$0.02 per GB"
+    different[4][4] = "0.03%"
+    different[5][2] = "$0.04 per GB"
+    description = describe_mismatch(expected, different)
+
+    assert description.startswith("first differing cells:")
+    assert "$0.01 per GB" in description
+    assert "$0.02 per GB" in description
+    assert "0.03%" in description
+    assert "$0.04 per GB" not in description
+    assert description.count("expected ") == 3
+
+
 def test_verbose_output() -> None:
     """Wire the verbose switch into expected-versus-actual trial logging."""
     prompt, expected_markdown = load_benchmark_assets()
@@ -255,6 +289,7 @@ if __name__ == "__main__":
     test_expected_response_values()
     test_markdown_normalization()
     test_incorrect_tables()
+    test_mismatch_description()
     test_verbose_output()
     test_copilot_provider()
     test_copilot_provider_error()

@@ -137,6 +137,45 @@ def check_correct(
     return actual is not None and expected == actual
 
 
+def describe_mismatch(
+    expected: list[list[str]],
+    actual: list[list[str]] | None,
+) -> str:
+    """Describe a structural mismatch or the first three differing cells."""
+    if actual is None:
+        return "response did not contain a parseable rectangular Markdown table"
+
+    if len(expected) != len(actual):
+        return f"row count mismatch: expected {len(expected)}, got {len(actual)}"
+
+    expected_cells = sum(len(row) for row in expected)
+    actual_cells = sum(len(row) for row in actual)
+    if expected_cells != actual_cells:
+        return f"cell count mismatch: expected {expected_cells}, got {actual_cells}"
+
+    differences = []
+    for row_index, (expected_row, actual_row) in enumerate(zip(expected, actual)):
+        for column_index, (expected_cell, actual_cell) in enumerate(
+            zip(expected_row, actual_row)
+        ):
+            if expected_cell == actual_cell:
+                continue
+
+            column_name = expected[0][column_index]
+            row_name = expected_row[0] if row_index > 0 else "header"
+            differences.append(
+                f"row {row_index + 1} ({row_name!r}), "
+                f"column {column_index + 1} ({column_name!r}): "
+                f"expected {expected_cell!r}, got {actual_cell!r}"
+            )
+            if len(differences) == 3:
+                return "first differing cells: " + "; ".join(differences)
+
+    if differences:
+        return "differing cells: " + "; ".join(differences)
+    return "tables differ"
+
+
 def log_verbose_comparison(
     expected: list[list[str]],
     actual: list[list[str]] | None,
@@ -441,7 +480,11 @@ def run_benchmark(
             elif result.correct:
                 print(f"  [{now}] Trial {trial_num + 1:2d}: CORRECT ({elapsed})")
             else:
-                print(f"  [{now}] Trial {trial_num + 1:2d}: WRONG ({elapsed})")
+                mismatch = describe_mismatch(result.expected, result.actual)
+                print(
+                    f"  [{now}] Trial {trial_num + 1:2d}: "
+                    f"WRONG ({elapsed}) - {mismatch}"
+                )
 
             save_checkpoint(results, checkpoint_file)
 

@@ -20,6 +20,9 @@ Headers, row order, row and column counts, source values, calculated values, pun
 
 Added USD values use exactly two decimal places, while savings percentages use exactly four significant figures. Both use strict round-half-up rounding, as specified in the prompt.
 
+Wrong trials report an unparseable response or a row/cell count mismatch. When
+the table shape matches, the output identifies the first three differing cells.
+
 ## Installation
 
 Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
