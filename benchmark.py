@@ -5,6 +5,8 @@ import argparse
 import csv
 import json
 import os
+import shutil
+import subprocess
 import sys
 import time
 import urllib.error
@@ -147,13 +149,17 @@ def log_verbose_comparison(
 
 
 def check_api_keys(models: list[str]) -> None:
-    """Check that required API keys are set before running the benchmark."""
+    """Check that required provider credentials and executables are available."""
     needs_openai = any(
-        (m in OPENAI_MODELS or m.startswith("gpt-")) and not is_ollama_model(m)
+        (m in OPENAI_MODELS or m.startswith("gpt-"))
+        and not is_ollama_model(m)
+        and not is_copilot_model(m)
         for m in models
     )
     needs_anthropic = any(
-        m in ANTHROPIC_MODELS or m.startswith("claude-") for m in models
+        (m in ANTHROPIC_MODELS or m.startswith("claude-"))
+        and not is_copilot_model(m)
+        for m in models
     )
 
     missing = []
@@ -170,6 +176,13 @@ def check_api_keys(models: list[str]) -> None:
         print("\nSet them with:", file=sys.stderr)
         for key in missing:
             print(f'  export {key}="your-key-here"', file=sys.stderr)
+        raise SystemExit(1)
+
+    if any(is_copilot_model(model) for model in models) and not shutil.which("copilot"):
+        print(
+            "Error: The copilot executable is required for copilot: models",
+            file=sys.stderr,
+        )
         raise SystemExit(1)
 
 
@@ -193,6 +206,11 @@ def create_chat_client(model: str, config: BenchmarkConfig):
     raise ValueError(f"Unknown model: {model}")
 
 
+def is_copilot_model(model: str) -> bool:
+    """Return whether a model should run through GitHub Copilot CLI."""
+    return model.startswith("copilot:")
+
+
 def is_ollama_model(model: str) -> bool:
     """Return whether a model is served by Ollama."""
     return (
@@ -200,6 +218,47 @@ def is_ollama_model(model: str) -> bool:
         or model in OLLAMA_MODELS_SHORT
         or model.startswith("ollama:")
     )
+
+
+def get_model_response(model: str, config: BenchmarkConfig, prompt: str) -> str:
+    """Run a prompt through the selected provider and return response text."""
+    if is_copilot_model(model):
+        copilot_model = model.removeprefix("copilot:")
+        if not copilot_model:
+            raise ValueError("Copilot model name cannot be empty")
+
+        command = [
+            "copilot",
+            "--model",
+            copilot_model,
+            "--available-tools=",
+            "--allow-all-tools",
+            "--disable-builtin-mcps",
+            "--no-custom-instructions",
+            "--no-remote",
+            "--no-remote-export",
+            "--silent",
+            "--no-color",
+            "--prompt",
+            prompt,
+        ]
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip()
+            raise RuntimeError(
+                f"Copilot CLI exited with status {result.returncode}: {detail}"
+            )
+        return result.stdout.strip()
+
+    client = create_chat_client(model, config)
+    if is_ollama_model(model):
+        return str(client.chat(f"{SYSTEM_PROMPT}\n\n{prompt}", echo="none"))
+    return str(client.chat(prompt, echo="none"))
 
 
 def is_retriable_error(error: Exception) -> bool:
@@ -252,19 +311,9 @@ def run_single_trial(
 
     for attempt in range(max_retries + 1):
         try:
-            client = create_chat_client(model, config)
             start_time = time.time()
-
-            if is_ollama_model(model):
-                response = client.chat(
-                    f"{SYSTEM_PROMPT}\n\n{prompt}",
-                    echo="none",
-                )
-            else:
-                response = client.chat(prompt, echo="none")
-
+            raw_response = get_model_response(model, config, prompt)
             latency_ms = (time.time() - start_time) * 1000
-            raw_response = str(response)
             actual = normalize_markdown_table(raw_response)
             correct = check_correct(expected, actual)
 

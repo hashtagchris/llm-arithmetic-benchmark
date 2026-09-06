@@ -52,11 +52,20 @@ uv run python benchmark.py \
   --ollama-url http://localhost:11434 \
   --models ollama:llama3.1:70b
 
+# Run models through GitHub Copilot CLI
+uv run python benchmark.py \
+  --models copilot:gpt-5.4 copilot:claude-sonnet-5 \
+  --trials 10
+
 # Resume an interrupted run
 uv run python benchmark.py --models gpt-4o-mini --resume results/checkpoint_<timestamp>.json
 ```
 
 Set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` when using the corresponding hosted models.
+Models prefixed with `copilot:` are run through the installed and authenticated
+GitHub Copilot CLI. Each trial uses a fresh non-interactive session with tools,
+built-in MCP servers, repository instructions, memory, and remote export disabled.
+The prefix is removed before passing the model name to `copilot --model`.
 
 ## Output
 

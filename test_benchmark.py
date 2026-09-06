@@ -2,6 +2,7 @@
 """Offline tests for the Markdown pricing-table benchmark."""
 
 import io
+import subprocess
 from contextlib import redirect_stderr
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -12,6 +13,7 @@ from benchmark import (
     PROMPT_PATH,
     check_correct,
     format_normalized_table,
+    get_model_response,
     load_benchmark_assets,
     normalize_markdown_table,
     parse_args,
@@ -190,10 +192,70 @@ def test_verbose_output() -> None:
     assert not parse_args([]).verbose
 
 
+def test_copilot_provider() -> None:
+    """Run prefixed models through an isolated Copilot CLI invocation."""
+    captured = {}
+
+    def fake_run(command, capture_output, text, check):
+        captured["command"] = command
+        assert capture_output
+        assert text
+        assert not check
+        return subprocess.CompletedProcess(command, 0, stdout="completed table\n", stderr="")
+
+    original_run = benchmark.subprocess.run
+    benchmark.subprocess.run = fake_run
+    try:
+        response = get_model_response(
+            "copilot:gpt-5.4",
+            BenchmarkConfig(models=["copilot:gpt-5.4"]),
+            "benchmark prompt",
+        )
+    finally:
+        benchmark.subprocess.run = original_run
+
+    command = captured["command"]
+    assert response == "completed table"
+    assert command[:3] == ["copilot", "--model", "gpt-5.4"]
+    assert "--available-tools=" in command
+    assert "--disable-builtin-mcps" in command
+    assert "--no-custom-instructions" in command
+    assert command[-2:] == ["--prompt", "benchmark prompt"]
+
+
+def test_copilot_provider_error() -> None:
+    """Surface Copilot CLI failures instead of returning an empty response."""
+    def fake_run(command, capture_output, text, check):
+        return subprocess.CompletedProcess(
+            command,
+            1,
+            stdout="",
+            stderr="unknown model",
+        )
+
+    original_run = benchmark.subprocess.run
+    benchmark.subprocess.run = fake_run
+    try:
+        try:
+            get_model_response(
+                "copilot:not-a-model",
+                BenchmarkConfig(models=["copilot:not-a-model"]),
+                "benchmark prompt",
+            )
+        except RuntimeError as error:
+            assert "unknown model" in str(error)
+        else:
+            raise AssertionError("Expected Copilot CLI failure")
+    finally:
+        benchmark.subprocess.run = original_run
+
+
 if __name__ == "__main__":
     test_assets()
     test_expected_response_values()
     test_markdown_normalization()
     test_incorrect_tables()
     test_verbose_output()
+    test_copilot_provider()
+    test_copilot_provider_error()
     print("All tests passed!")
