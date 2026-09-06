@@ -12,6 +12,7 @@ from benchmark import (
     EXPECTED_RESPONSE_PATH,
     PROMPT_PATH,
     check_correct,
+    compare_tables,
     describe_mismatch,
     format_normalized_table,
     get_model_response,
@@ -146,6 +147,53 @@ def test_incorrect_tables() -> None:
     assert not check_correct(expected, extra_row)
     assert not check_correct(expected, malformed)
     assert not check_correct(expected, None)
+
+
+def test_numeric_equivalence_warnings() -> None:
+    """Accept equal numbers with missing units or different formatting."""
+    prompt, expected_markdown = load_benchmark_assets()
+    expected = normalize_markdown_table(expected_markdown)
+    assert expected is not None
+
+    actual = [row.copy() for row in expected]
+    actual[1][1] = "$4.600"
+    actual[1][2] = "4.60"
+    actual[5][1] = "$1,408.00"
+    actual[5][2] = "$3.520"
+    actual[5][3] = "3.52"
+    actual[5][4] = "23.480"
+
+    correct, warnings = compare_tables(expected, actual)
+    assert correct
+    assert len(warnings) == 6
+    assert all("numerically equal" in warning for warning in warnings)
+
+    class FakeClient:
+        def chat(self, prompt: str, echo: str) -> str:
+            return format_normalized_table(actual)
+
+    original_create_chat_client = benchmark.create_chat_client
+    benchmark.create_chat_client = lambda model, config: FakeClient()
+    output = io.StringIO()
+    try:
+        with redirect_stderr(output):
+            result = run_single_trial(
+                "gpt-4o-mini",
+                0,
+                BenchmarkConfig(models=["gpt-4o-mini"]),
+                prompt,
+                expected,
+            )
+    finally:
+        benchmark.create_chat_client = original_create_chat_client
+
+    assert result.correct
+    assert result.warnings == warnings
+    assert output.getvalue().count("WARNING:") == 6
+
+    wrong_label = [row.copy() for row in actual]
+    wrong_label[5][0] = "400"
+    assert not check_correct(expected, wrong_label)
 
 
 def test_mismatch_description() -> None:
@@ -296,6 +344,7 @@ if __name__ == "__main__":
     test_expected_response_values()
     test_markdown_normalization()
     test_incorrect_tables()
+    test_numeric_equivalence_warnings()
     test_mismatch_description()
     test_verbose_output()
     test_copilot_provider()

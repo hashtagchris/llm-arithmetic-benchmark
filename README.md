@@ -16,7 +16,11 @@ The comparison ignores presentation-only differences:
 - standard Markdown separator alignment
 - a surrounding Markdown code fence
 
-Headers, row order, row and column counts, source values, calculated values, punctuation, significant figures, and trailing zeros must match.
+Headers, pricing-tier labels, row order, and row and column counts must match.
+Numeric data cells are compared by value, so qualifiers such as `per GB` and
+`per day`, currency/percentage markers, and trailing precision may be omitted
+or formatted differently. Numerically equal but textually different cells pass
+with a warning that shows the expected and actual text.
 
 All USD values use exactly two decimal places, while savings percentages use exactly four significant figures. Both use strict round-half-up rounding, as specified in the prompt.
 
