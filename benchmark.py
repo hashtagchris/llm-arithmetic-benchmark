@@ -5,13 +5,15 @@ import argparse
 import csv
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
+from decimal import Decimal, InvalidOperation
 from datetime import datetime
 from pathlib import Path
 
@@ -54,6 +56,13 @@ SYSTEM_PROMPT = (
     "Do not use tools or code execution. Return only the completed table."
 )
 
+NUMERIC_CELL_PATTERN = re.compile(
+    r"^\s*\$?\s*"
+    r"([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)"
+    r"\s*%?\s*(?:per\s+(?:GB|day))?\s*$",
+    re.IGNORECASE,
+)
+
 
 @dataclass
 class TrialResult:
@@ -65,6 +74,7 @@ class TrialResult:
     expected: list[list[str]]
     actual: list[list[str]] | None
     raw_response: str
+    warnings: list[str] = field(default_factory=list)
     error: str | None = None
     latency_ms: float = 0.0
 
@@ -133,8 +143,95 @@ def check_correct(
     expected: list[list[str]],
     actual: list[list[str]] | None,
 ) -> bool:
-    """Check normalized tables for exact cell and structure equality."""
-    return actual is not None and expected == actual
+    """Check tables, accepting numerically equivalent data cells."""
+    correct, _ = compare_tables(expected, actual)
+    return correct
+
+
+def _numeric_cell_value(cell: str) -> Decimal | None:
+    """Extract a numeric value from a currency, percentage, or rate cell."""
+    match = NUMERIC_CELL_PATTERN.fullmatch(cell)
+    if not match:
+        return None
+    try:
+        return Decimal(match.group(1).replace(",", ""))
+    except InvalidOperation:
+        return None
+
+
+def _cell_location(
+    expected: list[list[str]],
+    row_index: int,
+    column_index: int,
+) -> str:
+    """Format a stable row and column location for diagnostics."""
+    column_name = expected[0][column_index]
+    row_name = expected[row_index][0] if row_index > 0 else "header"
+    return (
+        f"row {row_index + 1} ({row_name!r}), "
+        f"column {column_index + 1} ({column_name!r})"
+    )
+
+
+def _cells_match(
+    expected_cell: str,
+    actual_cell: str,
+    row_index: int,
+    column_index: int,
+) -> tuple[bool, bool]:
+    """Return whether cells match and whether numeric tolerance was required."""
+    if expected_cell == actual_cell:
+        return True, False
+    if row_index == 0 or column_index == 0:
+        return False, False
+
+    expected_value = _numeric_cell_value(expected_cell)
+    actual_value = _numeric_cell_value(actual_cell)
+    numerically_equal = (
+        expected_value is not None
+        and actual_value is not None
+        and expected_value == actual_value
+    )
+    return numerically_equal, numerically_equal
+
+
+def compare_tables(
+    expected: list[list[str]],
+    actual: list[list[str]] | None,
+) -> tuple[bool, list[str]]:
+    """Compare table structure and cells, returning accepted-value warnings."""
+    if actual is None or len(expected) != len(actual):
+        return False, []
+
+    expected_cells = sum(len(row) for row in expected)
+    actual_cells = sum(len(row) for row in actual)
+    if expected_cells != actual_cells:
+        return False, []
+
+    warnings = []
+    correct = True
+    for row_index, (expected_row, actual_row) in enumerate(zip(expected, actual)):
+        if len(expected_row) != len(actual_row):
+            return False, []
+        for column_index, (expected_cell, actual_cell) in enumerate(
+            zip(expected_row, actual_row)
+        ):
+            matches, numeric_warning = _cells_match(
+                expected_cell,
+                actual_cell,
+                row_index,
+                column_index,
+            )
+            if not matches:
+                correct = False
+            elif numeric_warning:
+                location = _cell_location(expected, row_index, column_index)
+                warnings.append(
+                    f"{location} differs in formatting but is numerically equal: "
+                    f"expected {expected_cell!r}, got {actual_cell!r}"
+                )
+
+    return correct, warnings
 
 
 def describe_mismatch(
@@ -158,15 +255,18 @@ def describe_mismatch(
         for column_index, (expected_cell, actual_cell) in enumerate(
             zip(expected_row, actual_row)
         ):
-            if expected_cell == actual_cell:
+            matches, _ = _cells_match(
+                expected_cell,
+                actual_cell,
+                row_index,
+                column_index,
+            )
+            if matches:
                 continue
 
-            column_name = expected[0][column_index]
-            row_name = expected_row[0] if row_index > 0 else "header"
+            location = _cell_location(expected, row_index, column_index)
             differences.append(
-                f"row {row_index + 1} ({row_name!r}), "
-                f"column {column_index + 1} ({column_name!r}): "
-                f"expected {expected_cell!r}, got {actual_cell!r}"
+                f"{location}: expected {expected_cell!r}, got {actual_cell!r}"
             )
             if len(differences) == 3:
                 return "first differing cells: " + "; ".join(differences)
@@ -354,7 +454,10 @@ def run_single_trial(
             raw_response = get_model_response(model, config, prompt)
             latency_ms = (time.time() - start_time) * 1000
             actual = normalize_markdown_table(raw_response)
-            correct = check_correct(expected, actual)
+            correct, warnings = compare_tables(expected, actual)
+
+            for warning in warnings:
+                print(f"    WARNING: {warning}", file=sys.stderr)
 
             if config.verbose:
                 log_verbose_comparison(expected, actual)
@@ -366,6 +469,7 @@ def run_single_trial(
                 expected=expected,
                 actual=actual,
                 raw_response=raw_response,
+                warnings=warnings,
                 latency_ms=latency_ms,
             )
         except Exception as error:
