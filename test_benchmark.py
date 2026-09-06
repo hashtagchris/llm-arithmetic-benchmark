@@ -13,6 +13,7 @@ from benchmark import (
     PROMPT_PATH,
     check_correct,
     compare_tables,
+    count_differing_cells,
     describe_mismatch,
     format_normalized_table,
     get_model_response,
@@ -20,6 +21,7 @@ from benchmark import (
     normalize_markdown_table,
     parse_args,
     run_single_trial,
+    summarize_results,
 )
 
 
@@ -189,11 +191,56 @@ def test_numeric_equivalence_warnings() -> None:
 
     assert result.correct
     assert result.warnings == warnings
+    assert result.differing_cells == 6
     assert output.getvalue().count("WARNING:") == 6
+    assert "row " not in output.getvalue()
+    assert "column " not in output.getvalue()
 
     wrong_label = [row.copy() for row in actual]
     wrong_label[5][0] = "400"
     assert not check_correct(expected, wrong_label)
+
+
+def test_differing_cell_count_and_summary() -> None:
+    """Count textual cell differences and summarize latency in seconds."""
+    _, expected_markdown = load_benchmark_assets()
+    expected = normalize_markdown_table(expected_markdown)
+    assert expected is not None
+
+    actual = [row.copy() for row in expected]
+    actual[5][2] = "3.52"
+    actual[5][3] = "$0.01 per GB"
+    assert count_differing_cells(expected, actual) == 2
+    assert count_differing_cells(expected, None) == 65
+    assert count_differing_cells(expected, expected[:-1]) == 5
+
+    results = [
+        benchmark.TrialResult(
+            model="model-a",
+            trial_num=0,
+            correct=True,
+            expected=expected,
+            actual=actual,
+            raw_response="",
+            differing_cells=2,
+            latency_ms=1234,
+        ),
+        benchmark.TrialResult(
+            model="model-a",
+            trial_num=1,
+            correct=False,
+            expected=expected,
+            actual=expected,
+            raw_response="",
+            differing_cells=3,
+            latency_ms=2345,
+        ),
+    ]
+    summary = summarize_results(results)
+
+    assert summary[0]["avg_latency_seconds"] == "1.79"
+    assert summary[0]["differing_cells"] == 5
+    assert "avg_latency_ms" not in summary[0]
 
 
 def test_mismatch_description() -> None:
@@ -345,6 +392,7 @@ if __name__ == "__main__":
     test_markdown_normalization()
     test_incorrect_tables()
     test_numeric_equivalence_warnings()
+    test_differing_cell_count_and_summary()
     test_mismatch_description()
     test_verbose_output()
     test_copilot_provider()

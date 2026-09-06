@@ -75,6 +75,7 @@ class TrialResult:
     actual: list[list[str]] | None
     raw_response: str
     warnings: list[str] = field(default_factory=list)
+    differing_cells: int = 0
     error: str | None = None
     latency_ms: float = 0.0
 
@@ -225,13 +226,42 @@ def compare_tables(
             if not matches:
                 correct = False
             elif numeric_warning:
-                location = _cell_location(expected, row_index, column_index)
                 warnings.append(
-                    f"{location} differs in formatting but is numerically equal: "
+                    "cell differs in formatting but is numerically equal: "
                     f"expected {expected_cell!r}, got {actual_cell!r}"
                 )
 
     return correct, warnings
+
+
+def count_differing_cells(
+    expected: list[list[str]],
+    actual: list[list[str]] | None,
+) -> int:
+    """Count textually different, missing, or extra cells."""
+    if actual is None:
+        return sum(len(row) for row in expected)
+
+    differing = 0
+    row_count = max(len(expected), len(actual))
+    for row_index in range(row_count):
+        expected_row = expected[row_index] if row_index < len(expected) else []
+        actual_row = actual[row_index] if row_index < len(actual) else []
+        column_count = max(len(expected_row), len(actual_row))
+
+        for column_index in range(column_count):
+            expected_cell = (
+                expected_row[column_index]
+                if column_index < len(expected_row)
+                else None
+            )
+            actual_cell = (
+                actual_row[column_index] if column_index < len(actual_row) else None
+            )
+            if expected_cell != actual_cell:
+                differing += 1
+
+    return differing
 
 
 def describe_mismatch(
@@ -455,6 +485,7 @@ def run_single_trial(
             latency_ms = (time.time() - start_time) * 1000
             actual = normalize_markdown_table(raw_response)
             correct, warnings = compare_tables(expected, actual)
+            differing_cells = count_differing_cells(expected, actual)
 
             for warning in warnings:
                 print(f"    WARNING: {warning}", file=sys.stderr)
@@ -470,6 +501,7 @@ def run_single_trial(
                 actual=actual,
                 raw_response=raw_response,
                 warnings=warnings,
+                differing_cells=differing_cells,
                 latency_ms=latency_ms,
             )
         except Exception as error:
@@ -502,6 +534,7 @@ def run_single_trial(
         expected=expected,
         actual=None,
         raw_response="",
+        differing_cells=count_differing_cells(expected, None),
         error=str(last_error),
     )
 
@@ -617,7 +650,14 @@ def summarize_results(results: list[TrialResult]) -> list[dict]:
                 "correct": correct,
                 "total": total,
                 "accuracy": correct / total if total else 0,
-                "avg_latency_ms": sum(latencies) / len(latencies) if latencies else 0,
+                "avg_latency_seconds": (
+                    f"{sum(latencies) / len(latencies) / 1000:.2f}"
+                    if latencies
+                    else "0.00"
+                ),
+                "differing_cells": sum(
+                    result.differing_cells for result in model_results
+                ),
                 "errors": sum(result.error is not None for result in model_results),
             }
         )
