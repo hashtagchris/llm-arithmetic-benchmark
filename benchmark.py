@@ -649,7 +649,7 @@ def summarize_results(results: list[TrialResult]) -> list[dict]:
                     if latencies
                     else "0.00"
                 ),
-                "differing_cells": (
+                "avg_differing_cells": (
                     f"{sum(result.differing_cells for result in model_results) / total:.2f}"
                     if total
                     else "0.00"
