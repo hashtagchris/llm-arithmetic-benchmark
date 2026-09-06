@@ -202,7 +202,7 @@ def test_numeric_equivalence_warnings() -> None:
 
 
 def test_differing_cell_count_and_summary() -> None:
-    """Count textual cell differences and summarize latency in seconds."""
+    """Count cell differences and summarize their average with latency."""
     _, expected_markdown = load_benchmark_assets()
     expected = normalize_markdown_table(expected_markdown)
     assert expected is not None
@@ -239,7 +239,7 @@ def test_differing_cell_count_and_summary() -> None:
     summary = summarize_results(results)
 
     assert summary[0]["avg_latency_seconds"] == "1.79"
-    assert summary[0]["differing_cells"] == 5
+    assert summary[0]["differing_cells"] == "2.50"
     assert "avg_latency_ms" not in summary[0]
 
 

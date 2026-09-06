@@ -629,7 +629,7 @@ def run_benchmark(
 
 
 def summarize_results(results: list[TrialResult]) -> list[dict]:
-    """Aggregate accuracy and latency by model."""
+    """Aggregate accuracy, latency, and differing cells by model."""
     summaries = []
     for model in sorted({result.model for result in results}):
         model_results = [result for result in results if result.model == model]
@@ -649,8 +649,10 @@ def summarize_results(results: list[TrialResult]) -> list[dict]:
                     if latencies
                     else "0.00"
                 ),
-                "differing_cells": sum(
-                    result.differing_cells for result in model_results
+                "differing_cells": (
+                    f"{sum(result.differing_cells for result in model_results) / total:.2f}"
+                    if total
+                    else "0.00"
                 ),
                 "errors": sum(result.error is not None for result in model_results),
             }
