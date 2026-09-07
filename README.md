@@ -111,3 +111,8 @@ uv run python test_benchmark.py
 ## License
 
 [MIT](LICENSE)
+
+## Related
+
+* https://github.com/wesm/llm-arithmetic-benchmark - the repo this code was forked from
+* https://github.com/maxim-saplin/llm_arithmetic
