@@ -84,6 +84,21 @@ Results are written to `results/`:
 | `raw_results_<timestamp>.json` | Full trial data, including raw and normalized responses |
 | `summary_<timestamp>.csv` | Accuracy, average latency in seconds, average differing cells per trial (`avg_differing_cells`), and error totals by model |
 
+## Sample results
+
+On its failed run copilot-gpt-5.4 returned 31.96% instead of 32.00%, and 36.09% instead of 36.00%.
+
+muse-glimmer was close on its failed runs. It frequently returned 33.9x% instead of 34.00% for row 12.
+
+model|correct|total|accuracy|avg_latency_seconds|avg_differing_cells|errors
+-|-:|-:|-:|-:|-:|-:
+copilot:gpt-5.4|24|25|0.96|14.48|0.12|0
+copilot:claude-sonnet-5|23|25|0.92|16.56|0.28|0
+copilot:auto|21|25|0.84|16.72|0.44|0
+copilot:mai-code-1.1-flash|20|25|0.80|28.68|0.28|0
+ollama:muse-glimmer:30b-mlx|3|25|0.12|321.03|0.96|0
+ollama:gemma3:4b|0|25|0.00|7.55|43.00|0
+
 ## Running Tests
 
 The tests are offline and do not call model APIs.
